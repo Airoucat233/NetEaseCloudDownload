@@ -6,7 +6,14 @@ import requests, os, time
 from requests.cookies import cookiejar_from_dict
 from scrapy.selector import Selector
 import chardet
+from selenium.webdriver.common.by import By
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver import ActionChains
 
+config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
 failed_music=[]
@@ -18,8 +25,14 @@ failed_music=[]
 
 class Download_netease_cloud_music():
     def __init__(self):
-        self.username=''
-        self.password=''
+        if not os.path.exists(config_path):
+            with open(config_path,'w') as f:
+                f.write(json.dumps({'user':{'username':'','password':''}}))
+        config = {}
+        with open(config_path, 'r') as f:
+            config = json.loads(f.read())
+        self.username=config.get('user').get('username')
+        self.password=config.get('user').get('password')
         self.cookies=''
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -31,10 +44,16 @@ class Download_netease_cloud_music():
         self.session.cookies=cookiejar_from_dict(self.cookies)
 
     def login(self):
-        if not self.username:
+        if not self.username or not self.password:
             self.username=input('请输入用户名:')
-        if not self.password:
             self.password = input('请输入密码:')
+            config = {}
+            with open(config_path,'r') as f:
+                config = json.loads(f.read())
+                config['user']['username'] = self.username
+                config['user']['password'] = self.password
+            with open(config_path, 'w') as f:
+                f.write(json.dumps(config))
         t = int(time.time())
         url='https://netease-cloud-music-api-gamma-orpin.vercel.app/login/cellphone'
         url += "?timestamp=" + str(t)
@@ -42,6 +61,7 @@ class Download_netease_cloud_music():
         json_obj=json.loads(res.text)
         if json_obj.get('code')==200:
             print('登陆成功')
+
             self.cookies=self.getCookieDict(json_obj.get('cookie'))
 
     def getCookieDict(self,cook):
@@ -79,10 +99,50 @@ class Download_netease_cloud_music():
         #songname = singer + '-' + song_name
         return songinfo
 
+    def remove_sep(self,s:str):#去除多个歌手间的分隔符，不能因为分隔符不同就不匹配
+        return s.replace(',','').replace(' ','').replace('&','')
+    def found_at_least_one(self,driver):#供WebDriverWait.until调用
+        return len(driver.find_elements(By.XPATH, "//div[@id=\'player\']/div/ol/li")) > 0
+    def get_high_quality(self,driver,song_name,singer,quality='320K'):
+        quality_map={
+            '128K':'标准',
+            '320K':'高品',
+            'FLAC':'FLAC'
+        }
+        url='http://tool.liumingye.cn/music/?page=audioPage&type=YQD&name=%s'%song_name
+
+        try:
+            driver.get(url)
+            WebDriverWait(driver, 8).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
+            elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
+            # if len(elements) > 0:
+            for el in elements:
+                name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
+                author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
+                if name == song_name and self.remove_sep(author) == self.remove_sep(singer):
+                    dl_button = el.find_element(By.XPATH,"span[@class='aplayer-list-download iconfont icon-xiazai']")
+                    # ActionChains(driver).move_to_element(dl_button).click().perform()
+                    driver.execute_script('arguments[0].click()', dl_button)
+                    WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, 'm-download')))
+                    return driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality_map[quality]).get_attribute("value")
+                    # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
+                    # if quality_map[quality]=='FLAC':
+                    #     suffix = '.flac'
+                    # else:
+                    #     suffix = '.mp3'
+                    # file_path = os.path.join(download_dir,song_name+' - '+singer+suffix)
+                    # WebDriverWait(driver,20).until(lambda d:os.path.exists(file_path))
+                    # if os.path.exists(file_path):
+                    #     os.rename(file_path,file_path.replace(' - '+singer,''))
+        except Exception as e:
+            logging.error("浏览器操作期间发生了错误-->\n",e)
+
     def download_song(self, songurl, dir_path):
         '''根据歌曲url，下载mp3文件'''
         songinfo= self.get_songinfo(songurl)  # 根据歌曲url得出ID、歌名
-        song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
+        #song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
+        song_url = self.get_high_quality(self.driver,songinfo['name'],songinfo['singer'], '320K')
+
         if songinfo.get('cover_url'):#避免重复下载同一个专辑封面
             try:
                 res = requests.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
@@ -113,6 +173,10 @@ class Download_netease_cloud_music():
                 failed_music.append(songinfo['name'])
                 return
             logging.error(f"新建ID3标签完成")
+        except mutagen.MutagenError:
+            logging.error(f"${songinfo['path']}->没有这个文件")
+            failed_music.append(songinfo['name'])
+            return
         audio.update_to_v23()  # 把可能存在的旧版本升级为2.3
         if os.path.exists(songinfo['path_cover']):
             img = open(songinfo['path_cover'], 'rb')
@@ -141,17 +205,26 @@ class Download_netease_cloud_music():
 
     def work(self, playlist):
         if not os.path.exists(dir_cover):
-            os.mkdir(dir_cover)
+            os.makedirs(dir_cover)
         songurls = self.get_songurls(playlist)  # 输入歌单编号，得到歌单所有歌曲的url
-        for songurl in songurls:
-            songinfo=self.download_song(songurl, dir_path)# 下载歌曲
-            self.setSongInfo(songinfo)#添加ID3信息
-            print(f"${songinfo['name']} 下载完成")
+        chrome_options = Options()
+        #chrome_options.add_argument('--headless')  # 无窗口启动chrome
+        chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
+        self.driver = webdriver.Chrome(options=chrome_options)
+        try:
+            for songurl in songurls:
+                songinfo=self.download_song(songurl, dir_path)# 下载歌曲
+                print(f"${songinfo['name']} 处理完成")
+                self.setSongInfo(songinfo)#添加ID3信息
+        except Exception as e:
+            logging.error(e)
+        finally:
+            self.driver.close()
 
 
 
 
 if __name__ == '__main__':
     d = Download_netease_cloud_music()
-    d.work(123456)#歌单id
-    print("下载失败的音乐:->"+failed_music.__str__())
+    d.work(7056793458)
+    logging.error("下载失败或添加ID3信息失败的音乐:->"+failed_music.__str__())
