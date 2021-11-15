@@ -66,7 +66,7 @@ class Download_netease_cloud_music():
         res = requests.post(url,data={f"phone":f"{self.username}","password":f"{self.password}"},headers={"Content-Type": "application/x-www-form-urlencoded;charset=utf-8"})
         json_obj=json.loads(res.text)
         if json_obj.get('code')==200:
-            print('登陆成功')
+            print('登录成功')
 
             self.cookies=self.getCookieDict(json_obj.get('cookie'))
 
