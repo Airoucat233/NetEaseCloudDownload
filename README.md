@@ -1,1 +1,2 @@
-# NetEaseCloudDownload
+## NetEaseCloudDownload
+一个批量下载网易云歌单的python脚本
