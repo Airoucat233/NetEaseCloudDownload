@@ -19,7 +19,7 @@ from selenium.webdriver import ActionChains
 config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
-
+global_args= {'args':[],'options':{}}
 # def check_charset(file_path):
 #     with open(file_path, "rb") as f:
 #         data = f.read(4)
@@ -256,7 +256,9 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality!='128K':
                 chrome_options = Options()
-                # chrome_options.add_argument('--headless')  # 无窗口启动chrome
+                if global_args['options'].get('s'):
+                    chrome_options.add_argument('--headless')  # 无窗口启动chrome
+                chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 self.driver = webdriver.Chrome(options=chrome_options)
@@ -280,11 +282,16 @@ class Download_netease_cloud_music():
                 print("程序已退出")
 
 
-def analysis_args(argv):
-    kargs={'u':'','p':''}
+def prase_args(argv):
+    """选项
+    -u : 用户名
+    -p : 密码
+    --show-browser 下载高音质时显示调用浏览器操作
+    """
+    kargs={'u':'','p':'','s':False}
     args=[]
     try:
-        opts, args = getopt.getopt(argv, "u:p:", ["help"])
+        opts, args = getopt.getopt(argv, "u:p:", ["help","show-browser"])
     except getopt.GetoptError:
         print('参数格式错误!')
         print('格式: main.py <歌单ID> [-u <username> -p <password>]')
@@ -294,16 +301,20 @@ def analysis_args(argv):
     for opt,arg in opts:
         if opt in ['-u']:
             kargs['u']=arg
-        if opt in ['-p']:
+        elif opt in ['-p']:
             if kargs.get('u') is None:
                 print("请先输入用户名!")
                 sys.exit(2)
             kargs['p']=arg
+        elif opt in ['--show-browser']:
+            kargs['s']=True
     if args == []:
         args.append(None)
     return kargs,args
 
 if __name__ == '__main__':
-    kargs,args = analysis_args(sys.argv[1:])
+    kargs,args = prase_args(sys.argv[1:])
+    global_args['args']=args
+    global_args['options']=kargs
     d = Download_netease_cloud_music(username=kargs['u'],password=kargs['p'])
     d.work(playlist = args[0])
