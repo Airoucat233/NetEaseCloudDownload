@@ -256,7 +256,7 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality!='128K':
                 chrome_options = Options()
-                if global_args['options'].get('s'):
+                if not global_args['options'].get('s'):
                     chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
