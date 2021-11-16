@@ -232,11 +232,12 @@ class Download_netease_cloud_music():
 
     def work(self, playlist=None):
         if not os.path.exists(dir_cover):
-            s=sys.platform
-            if s=='win32':
-                os.makedirs(dir_cover)
-            elif s=='linux':
-                os.system('sudo mkdir -p %s'% dir_cover)
+            os.makedirs(dir_cover)
+            # s=sys.platform
+            # if s=='win32':
+            #     os.makedirs(dir_cover)
+            # elif s=='linux':
+            #     os.system('sudo mkdir -p %s'% dir_cover)
         if playlist == None:
             key_in = input("请输入要下载的歌单ID或链接:\n")
             if re.match('\d+',key_in):
