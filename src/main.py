@@ -172,7 +172,7 @@ class Download_netease_cloud_music():
             with open(songinfo['path'], "wb+") as f:
                 f.write(res.content)
         except Exception as e:
-            logging.error(f"${songinfo['name']} 下载失败!")
+            logging.error(f"${songinfo['name']} 下载失败!",e)
             self.failed_music.append(songinfo)
         return songinfo
 
@@ -259,9 +259,9 @@ class Download_netease_cloud_music():
                 if not global_args['options'].get('s'):
                     chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
-                # chrome_options.add_argument('--disable-gpu')
-                # chrome_options.add_argument('--disable-dev-shm-usage')
-                # chrome_options.add_argument("window-size=1024,768")
+                chrome_options.add_argument('--disable-gpu')
+                chrome_options.add_argument('--disable-dev-shm-usage')
+                chrome_options.add_argument("window-size=1024,768")
                 chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 self.driver = webdriver.Chrome(options=chrome_options)
