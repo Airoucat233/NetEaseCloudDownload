@@ -9,6 +9,7 @@ import requests, os, time
 from requests.cookies import cookiejar_from_dict
 from scrapy.selector import Selector
 #import chardet
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -145,15 +146,7 @@ class Download_netease_cloud_music():
                 else:
                     print(name, '     ', author, '        ', '          失败')
             print('歌曲  ',song_name,'-',singer,' 没有匹配结果')
-                    # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
-                    # if quality_map[quality]=='FLAC':
-                    #     suffix = '.flac'
-                    # else:
-                    #     suffix = '.mp3'
-                    # file_path = os.path.join(download_dir,song_name+' - '+singer+suffix)
-                    # WebDriverWait(driver,20).until(lambda d:os.path.exists(file_path))
-                    # if os.path.exists(file_path):
-                    #     os.rename(file_path,file_path.replace(' - '+singer,''))
+
         except Exception as e:
             logging.error("浏览器操作期间发生了错误-->",e)
 
@@ -178,10 +171,33 @@ class Download_netease_cloud_music():
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if os.path.exists(songinfo['path']):
                 songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
-            with open(songinfo['path'], "wb+") as f:
-                f.write(res.content)
+            if res.status_code=='200':
+                with open(songinfo['path'], "wb+") as f:
+                    f.write(res.content)
+            else:
+                quality = self.music_quality
+                if quality['desc'] == 'FLAC':
+                    suffix = '.flac'
+                else:
+                    suffix = '.mp3'
+                file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + suffix)
+                while quality['level'] >= 0:
+                    try:
+                        self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc']).click()
+                    except Exception:
+                        print(f"{songinfo['name']} 没有 {quality['br']} 音质的下载源,尝试切换低一级音质...")
+                        if quality['level'] != 0:
+                            quality = quality_list[quality['level'] - 1]
+                        else:
+                            logging.error(f"{songinfo['name']} 所有品质音源都下载失败")
+                            break
+                WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
+                os.rename(file_path, file_path.replace(' - ' + songinfo['singer'], ''))
         except Exception as e:
-            logging.error(f"${songinfo['name']} 下载失败!",e)
+            if isinstance(e,TimeoutException):
+                logging.error(f"${songinfo['name']} 下载超时!",e)
+            else:
+                logging.error(f"${songinfo['name']} 下载失败!", e)
             self.failed_music.append(songinfo)
         return songinfo
 
@@ -280,6 +296,7 @@ class Download_netease_cloud_music():
                 chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 self.driver = webdriver.Chrome(options=chrome_options)
+                print('浏览器运行中...')
             self.handle(songinfos)
             while len(self.failed_music)!=0:
                 time.sleep(1)
