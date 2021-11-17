@@ -261,8 +261,8 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality['br']!='128K':
                 chrome_options = Options()
-                # if not global_args['options'].get('s'):
-                #     chrome_options.add_argument('--headless')  # 无窗口启动chrome
+                if not global_args['options'].get('s'):
+                    chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_argument('--disable-gpu')
                 chrome_options.add_argument('--disable-dev-shm-usage')
