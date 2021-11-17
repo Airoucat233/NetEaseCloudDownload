@@ -125,9 +125,9 @@ class Download_netease_cloud_music():
             WebDriverWait(driver, 8).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
             elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
             # if len(elements) > 0:
+            print('在搜索结果中匹配...')
+            print('歌名            ', '歌手            ', '           匹配结果')
             for el in elements:
-                print('在搜索结果中匹配...')
-                print('歌名            ', '歌手            ', '           匹配结果')
                 name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
                 author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
                 if name == song_name and self.remove_sep(author) == self.remove_sep(singer):
