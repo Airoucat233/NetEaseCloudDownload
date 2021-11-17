@@ -20,6 +20,11 @@ config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
 global_args= {'args':[],'options':{}}
+quality_list = [
+                {'level':0,'br': '128K', 'desc': '标准'},
+                {'level':1,'br': '320K', 'desc': '高品'},
+                {'level':2,'br': 'FLAC', 'desc': 'FLAC}'}
+]
 # def check_charset(file_path):
 #     with open(file_path, "rb") as f:
 #         data = f.read(4)
@@ -46,7 +51,7 @@ class Download_netease_cloud_music():
         self.session.headers = self.headers
         self.session.cookies=cookiejar_from_dict(self.cookies)
         self.failed_music = []
-        self.music_quality = ''
+        self.music_quality = {}
 
     def login(self):
         if not self.username or not self.password:
@@ -112,12 +117,7 @@ class Download_netease_cloud_music():
         return s.replace(',','').replace(' ','').replace('&','')
     def found_at_least_one(self,driver):#供WebDriverWait.until调用
         return len(driver.find_elements(By.XPATH, "//div[@id=\'player\']/div/ol/li")) > 0
-    def get_high_quality(self,driver,song_name,singer,quality='320K'):
-        quality_map={
-            '128K':'标准',
-            '320K':'高品',
-            'FLAC':'FLAC'
-        }
+    def get_high_quality(self,driver,song_name,singer,quality):
         url='http://tool.liumingye.cn/music/?page=audioPage&type=YQD&name=%s'%song_name
 
         try:
@@ -133,11 +133,12 @@ class Download_netease_cloud_music():
                     # ActionChains(driver).move_to_element(dl_button).click().perform()
                     driver.execute_script('arguments[0].click()', dl_button)
                     WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, 'm-download')))
-                    download_url = driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality_map[quality]).get_attribute("value")
-                    if download_url == '':
-                        return driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality_map['128K']).get_attribute("value")
-                    else:
-                        return download_url
+                    while quality['level']>=0:
+                        download_url = driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality['desc']).get_attribute("value")
+                        if download_url == '' and quality['level']!=0:
+                            quality=quality_list[quality['level']-1]
+                        else:
+                            return download_url
                     # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
                     # if quality_map[quality]=='FLAC':
                     #     suffix = '.flac'
@@ -153,7 +154,7 @@ class Download_netease_cloud_music():
     def download_song(self, songinfo):
         '''根据歌曲url，下载mp3文件'''
         #songinfo= self.get_songinfo(songurl)  # 根据歌曲url得出ID、歌名
-        if self.music_quality=='128K':
+        if self.music_quality['br']=='128K':
             song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
         else:
             song_url = self.get_high_quality(self.driver,songinfo['name'],songinfo['singer'], self.music_quality)
@@ -246,20 +247,18 @@ class Download_netease_cloud_music():
                 playlist = re.search('id=\d+',key_in).group().replace('id=','')
         songurls = self.get_songurls(playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
-        accept=0
         while not self.music_quality:
-            accept=input("输入相应数字设置下载音乐的音质：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n 1、320Kbps   2、FLAC   3、128Kbps\n")
-            if accept=='1':
-                self.music_quality = '320K'
-            elif accept=='2':
-                self.music_quality = 'FLAC'
-            elif accept=='3':
-                self.music_quality = '128K'
-            else:
+            accept=input("输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
+            try:
+                if accept == '':
+                    self.music_quality = quality_list[1]
+                else:
+                    self.music_quality = quality_list[int(accept)-1]
+            except Exception:
                 print("输入无效请重新输入!")
                 time.sleep(0.5)
         try:
-            if self.music_quality!='128K':
+            if self.music_quality['br']!='128K':
                 chrome_options = Options()
                 if not global_args['options'].get('s'):
                     chrome_options.add_argument('--headless')  # 无窗口启动chrome
