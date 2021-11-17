@@ -126,7 +126,7 @@ class Download_netease_cloud_music():
             elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
             # if len(elements) > 0:
             print('在搜索结果中匹配...')
-            print('歌名            ', '歌手            ', '           匹配结果')
+            print('歌名            ', '            歌手', '           匹配结果')
             for el in elements:
                 name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
                 author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
@@ -168,12 +168,14 @@ class Download_netease_cloud_music():
         if songinfo.get('cover_url'):#避免重复下载同一个专辑封面
             try:
                 res = requests.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
+                print('封面res:请求url:',res.url,'\ncode',res.status_code,'\n字节数',res.content.__len__())
                 with open(songinfo['path_cover'], "wb+") as f:
                     f.write(res.content)
             except Exception as e:
                 logging.error(f"${songinfo['name']} 封面下载失败!")
         try:
             res = requests.get(song_url, headers=self.headers,cookies=self.cookies)
+            print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if os.path.exists(songinfo['path']):
                 songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
             with open(songinfo['path'], "wb+") as f:
@@ -246,12 +248,14 @@ class Download_netease_cloud_music():
             #     os.makedirs(dir_cover)
             # elif s=='linux':
             #     os.system('sudo mkdir -p %s'% dir_cover)
-        if playlist == None:
+        while not playlist:
             key_in = input("请输入要下载的歌单ID或链接:\n")
             if re.match('\d+',key_in):
                 playlist = key_in
             elif re.search('music.163.com/(#/)?playlist\?id=\d+',key_in):
                 playlist = re.search('id=\d+',key_in).group().replace('id=','')
+            else:
+                print('无法识别歌单ID,请重新输入!')
         songurls = self.get_songurls(playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
         while not self.music_quality:
