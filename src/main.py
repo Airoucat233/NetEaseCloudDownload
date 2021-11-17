@@ -33,15 +33,22 @@ quality_list = [
 #     return charset
 
 class Download_netease_cloud_music():
-    def __init__(self,username,password):
+    def __init__(self,playlist,username,password):
         if not os.path.exists(config_path) or username!='':
             with open(config_path,'w') as f:
-                f.write(json.dumps({'user':{'username':username,'password':password}}))
-        config = {}
+                f.write(json.dumps({
+  "user":
+    {
+      "username": username,
+      "password": password
+    },
+  "playlist": playlist
+}))
         with open(config_path, 'r') as f:
             config = json.loads(f.read())
         self.username=config.get('user').get('username')
         self.password=config.get('user').get('password')
+        self.playlist=config.get('playlist')
         self.cookies=''
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -59,7 +66,6 @@ class Download_netease_cloud_music():
             if not self.username:
                 self.username=input('请输入用户名:')
             self.password = input('请输入密码:')
-            config = {}
             with open(config_path,'r') as f:
                 config = json.loads(f.read())
                 config['user']['username'] = self.username
@@ -123,7 +129,7 @@ class Download_netease_cloud_music():
 
         try:
             driver.get(url)
-            WebDriverWait(driver, 8).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
+            WebDriverWait(driver, 15).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
             elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
             # if len(elements) > 0:
             print('在搜索结果中匹配...')
@@ -171,7 +177,7 @@ class Download_netease_cloud_music():
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if os.path.exists(songinfo['path']):
                 songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
-            if res.status_code=='200':
+            if res.status_code==200:
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
             else:
@@ -184,7 +190,8 @@ class Download_netease_cloud_music():
                 file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + suffix)
                 while quality['level'] >= 0:
                     try:
-                        self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc']).click()
+                        element = self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc'])
+                        self.driver.execute_script('arguments[0].click()',element)
                     except Exception:
                         print(f"{songinfo['name']} 没有 {quality['br']} 音质的下载源,尝试切换低一级音质...")
                         if quality['level'] != 0:
@@ -257,7 +264,7 @@ class Download_netease_cloud_music():
             print(i.get('name'))
         print("-----------------------------------------------------")
 
-    def work(self, playlist=None):
+    def work(self):
         if not os.path.exists(dir_cover):
             os.makedirs(dir_cover)
             # s=sys.platform
@@ -265,15 +272,21 @@ class Download_netease_cloud_music():
             #     os.makedirs(dir_cover)
             # elif s=='linux':
             #     os.system('sudo mkdir -p %s'% dir_cover)
-        while not playlist:
+        while not self.playlist:
             key_in = input("请输入要下载的歌单ID或链接:\n")
             if re.match('\d+',key_in):
-                playlist = key_in
+                self.playlist = key_in
             elif re.search('music.163.com/(#/)?playlist\?id=\d+',key_in):
-                playlist = re.search('id=\d+',key_in).group().replace('id=','')
+                self.playlist = re.search('id=\d+',key_in).group().replace('id=','')
             else:
                 print('无法识别歌单ID,请重新输入!')
-        songurls = self.get_songurls(playlist)  # 输入歌单编号，得到歌单所有歌曲的url
+                continue
+            with open(config_path, 'r') as f:
+                config = json.loads(f.read())
+                config['playlist'] = self.playlist
+            with open(config_path, 'w') as f:
+                f.write(json.dumps(config))
+        songurls = self.get_songurls(self.playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
         while not self.music_quality:
             accept=input("输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
@@ -352,5 +365,5 @@ if __name__ == '__main__':
     kargs,args = prase_args(sys.argv[1:])
     global_args['args']=args
     global_args['options']=kargs
-    d = Download_netease_cloud_music(username=kargs['u'],password=kargs['p'])
-    d.work(playlist = args[0])
+    d = Download_netease_cloud_music(args[0],username=kargs['u'],password=kargs['p'])
+    d.work()
