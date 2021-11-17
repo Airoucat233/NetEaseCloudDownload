@@ -144,6 +144,7 @@ class Download_netease_cloud_music():
                             return download_url
                 else:
                     print(name, '     ', author, '        ', '          失败')
+            print('歌曲  ',song_name,'-',singer,' 没有匹配结果')
                     # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
                     # if quality_map[quality]=='FLAC':
                     #     suffix = '.flac'
