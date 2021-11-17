@@ -6,8 +6,16 @@
 2. `mutagen` 修改音乐文件ID3信息
 3. `selenium` 网页自动化工具 PS:选择下载高音质(320K+)时需要用到此工具到[另一个站点](http://tool.liumingye.cn/music)搜索并下载(才不是因为我还没搞明白网易云API才这么弄的)
 ## 使用
+### 写在前面
+使用selenium库必须安装浏览器和相应版本的浏览器驱动(本项目中是`chrome`和`chromedriver`)这里给出Windows下的具体做法,linux下更为复杂可以参考[这篇文章](https://www.cnblogs.com/brady-wang/p/11977391.html)
+1. 安装chrome浏览器,如果已经安装,查看一下版本号
+2. 到[chromedriver镜像站](http://npm.taobao.org/mirrors/chromedriver/)相应版本目录下下载`chromedriver_win32.zip`
+3. 解压后将`chromedriver.exe`放到python根目录下(注意区分是否virtualenv,见下文)
 ### Windows
 #### 下载打包后的exe可执行文件双击运行
+```
+
+```
 #### 直接运行源码
 1. 命令行下通过git下载本项目源码并进入该目录(我用的CMD而不是Git bash)
 ```
@@ -22,6 +30,8 @@ pip install virtualenv      #安装
 virtualenv env      #创建一个虚拟环境,env为虚拟环境目录名，目录名自定义
 
 env\Scripts\activate        #执行该路径下的activate.bat激活环境
+
+env\Scripts\deactivate      #停止
 
 env\Scripts\pip install -r requirements.txt #用该环境的pip安装依赖列表中的依赖
 ```
@@ -39,7 +49,11 @@ env\Scripts\python src\main.py       #设置了virtualenv
 
 python src\main.py      #没设置virtualenv
 ```
-
+4. 生成exe可执行程序
+```
+env\Scripts\pyinstaller -F src/main.py
+```
+执行完成后再dist目录可以看到`main.exe`
 ### Linux
 Linux下安装依赖和Windows命令行方式差不多,只不过注意一下系统的目录分隔符由反斜杠`\` 改成斜杠`/`，这里不再重复
 
