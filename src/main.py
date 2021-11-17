@@ -186,7 +186,8 @@ class Download_netease_cloud_music():
                 audio = mutagen.File(songinfo['path'], easy=False)
                 audio.add_tags()
             except mutagen.MutagenError:
-                logging.error(f"${songinfo['path']}->新建ID3信息失败,请检查音频文件能否正常打开")
+                os.remove(songinfo['path'])
+                logging.error(f"${songinfo['path']}->新建ID3信息失败,音频无效,已删除")
                 if not songinfo in self.failed_music:
                     self.failed_music.append(songinfo)
                 return
@@ -260,8 +261,8 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality['br']!='128K':
                 chrome_options = Options()
-                if not global_args['options'].get('s'):
-                    chrome_options.add_argument('--headless')  # 无窗口启动chrome
+                # if not global_args['options'].get('s'):
+                #     chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_argument('--disable-gpu')
                 chrome_options.add_argument('--disable-dev-shm-usage')
