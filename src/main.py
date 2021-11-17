@@ -175,6 +175,7 @@ class Download_netease_cloud_music():
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
             else:
+                print(f'请求链接 {res.status_code} ,直接使用浏览器下载...')
                 quality = self.music_quality
                 if quality['desc'] == 'FLAC':
                     suffix = '.flac'
