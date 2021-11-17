@@ -126,9 +126,12 @@ class Download_netease_cloud_music():
             elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
             # if len(elements) > 0:
             for el in elements:
+                print('在搜索结果中匹配...')
+                print('歌名            ', '歌手            ', '           匹配结果')
                 name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
                 author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
                 if name == song_name and self.remove_sep(author) == self.remove_sep(singer):
+                    print(name, '     ', author, '        ', '          成功')
                     dl_button = el.find_element(By.XPATH,"span[@class='aplayer-list-download iconfont icon-xiazai']")
                     # ActionChains(driver).move_to_element(dl_button).click().perform()
                     driver.execute_script('arguments[0].click()', dl_button)
@@ -139,6 +142,8 @@ class Download_netease_cloud_music():
                             quality=quality_list[quality['level']-1]
                         else:
                             return download_url
+                else:
+                    print(name, '     ', author, '        ', '          失败')
                     # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
                     # if quality_map[quality]=='FLAC':
                     #     suffix = '.flac'
