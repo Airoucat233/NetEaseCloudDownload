@@ -167,14 +167,14 @@ class Download_netease_cloud_music():
 
         if songinfo.get('cover_url'):#避免重复下载同一个专辑封面
             try:
-                res = requests.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
+                res = self.session.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
                 print('封面res:请求url:',res.url,'\ncode',res.status_code,'\n字节数',res.content.__len__())
                 with open(songinfo['path_cover'], "wb+") as f:
                     f.write(res.content)
             except Exception as e:
                 logging.error(f"${songinfo['name']} 封面下载失败!")
         try:
-            res = requests.get(song_url, headers=self.headers,cookies=self.cookies)
+            res = self.session.get(song_url, headers=self.headers,cookies=self.cookies)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if os.path.exists(songinfo['path']):
                 songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
