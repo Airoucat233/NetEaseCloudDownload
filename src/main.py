@@ -17,7 +17,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
 
-show_head=True #调试时方便控制浏览器是否显示
+show_head=False #调试时方便控制浏览器是否显示
 config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
