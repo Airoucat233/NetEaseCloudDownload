@@ -4,8 +4,6 @@ import getopt
 import json
 import logging
 import mutagen
-from mutagen import MutagenError
-from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB ,ID3NoHeaderError
 import requests, os, time
 from requests.cookies import cookiejar_from_dict
 from scrapy.selector import Selector
@@ -16,8 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver import ActionChains
-from util.tagAudio import modify
+from src.util.tagAudio import modify
 
 show_head=True #调试时方便控制浏览器是否显示
 config_path = 'config.json'
