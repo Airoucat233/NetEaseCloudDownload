@@ -9,6 +9,7 @@ import requests, os, time
 from requests.cookies import cookiejar_from_dict
 from scrapy.selector import Selector
 #import chardet
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -16,6 +17,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
 
+show_head=True #调试时方便控制浏览器是否显示
 config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
@@ -32,15 +34,22 @@ quality_list = [
 #     return charset
 
 class Download_netease_cloud_music():
-    def __init__(self,username,password):
+    def __init__(self,playlist,username,password):
         if not os.path.exists(config_path) or username!='':
             with open(config_path,'w') as f:
-                f.write(json.dumps({'user':{'username':username,'password':password}}))
-        config = {}
+                f.write(json.dumps({
+  "user":
+    {
+      "username": username,
+      "password": password
+    },
+  "playlist": playlist
+}))
         with open(config_path, 'r') as f:
             config = json.loads(f.read())
         self.username=config.get('user').get('username')
         self.password=config.get('user').get('password')
+        self.playlist=config.get('playlist')
         self.cookies=''
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -58,7 +67,6 @@ class Download_netease_cloud_music():
             if not self.username:
                 self.username=input('请输入用户名:')
             self.password = input('请输入密码:')
-            config = {}
             with open(config_path,'r') as f:
                 config = json.loads(f.read())
                 config['user']['username'] = self.username
@@ -122,12 +130,12 @@ class Download_netease_cloud_music():
 
         try:
             driver.get(url)
-            WebDriverWait(driver, 8).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
+            WebDriverWait(driver, 15).until(self.found_at_least_one)#//div[text()="这里有点空哦…"]
             elements = driver.find_elements(By.XPATH,"//div[@id='player']/div/ol/li")
             # if len(elements) > 0:
+            print('在搜索结果中匹配...')
+            print('歌名            ', '            歌手', '           匹配结果')
             for el in elements:
-                print('在搜索结果中匹配...')
-                print('歌名            ','歌手            ','           匹配结果')
                 name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
                 author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
                 if name == song_name and self.remove_sep(author) == self.remove_sep(singer):
@@ -143,16 +151,9 @@ class Download_netease_cloud_music():
                         else:
                             return download_url
                 else:
-                    print(name,'     ',author,'        ','          失败')
-                    # driver.find_element(By.XPATH, "//label[text()='%s']/../../div[2]/a"%quality_map[quality]).click()
-                    # if quality_map[quality]=='FLAC':
-                    #     suffix = '.flac'
-                    # else:
-                    #     suffix = '.mp3'
-                    # file_path = os.path.join(download_dir,song_name+' - '+singer+suffix)
-                    # WebDriverWait(driver,20).until(lambda d:os.path.exists(file_path))
-                    # if os.path.exists(file_path):
-                    #     os.rename(file_path,file_path.replace(' - '+singer,''))
+                    print(name, '     ', author, '        ', '          失败')
+            print('歌曲  ',song_name,'-',singer,' 没有匹配结果')
+
         except Exception as e:
             logging.error("浏览器操作期间发生了错误-->",e)
 
@@ -163,24 +164,69 @@ class Download_netease_cloud_music():
             song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
         else:
             song_url = self.get_high_quality(self.driver,songinfo['name'],songinfo['singer'], self.music_quality)
-        print('下载链接：',song_url)
+
         if songinfo.get('cover_url'):#避免重复下载同一个专辑封面
             try:
-                res = requests.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
+                res = self.session.get(songinfo['cover_url'], headers=self.headers,cookies=self.cookies)
                 print('封面res:请求url:',res.url,'\ncode',res.status_code,'\n字节数',res.content.__len__())
                 with open(songinfo['path_cover'], "wb+") as f:
                     f.write(res.content)
             except Exception as e:
-                logging.error(f"${songinfo['name']} 封面下载失败!")
+                logging.error(f"{songinfo['name']} 封面下载失败!")
         try:
-            res = requests.get(song_url, headers=self.headers,cookies=self.cookies)
-            print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if os.path.exists(songinfo['path']):
-                songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
-            with open(songinfo['path'], "wb+") as f:
-                f.write(res.content)
+                songinfo['path']=songinfo['path'].replace(songinfo['name'], songinfo['name']+' - '+songinfo['singer'])
+                if os.path.exists(songinfo['path']):
+                    os.remove(songinfo['path'])
+            res = self.session.get(song_url, headers=self.headers,cookies=self.cookies)
+            print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
+            if res.status_code==2000:#请求内容有效,直接写入
+                with open(songinfo['path'], "wb+") as f:
+                    f.write(res.content)
+            else: #请求状态不对,尝试在浏览器中直接点击下载
+                print(f'请求链接 {res.status_code} ,直接使用浏览器下载...')
+                quality = self.music_quality
+                if quality['desc'] == 'FLAC':
+                    suffix = '.flac'
+                else:
+                    suffix = '.mp3'
+                file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + suffix)
+                while quality['level'] >= 0:
+                    try:
+                        element = self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc'])
+                        self.driver.execute_script('arguments[0].click()',element)
+                    except Exception:
+                        print(f"{songinfo['name']} 没有 {quality['br']} 音质的下载源,尝试切换低一级音质...")
+                        if quality['level'] != 0:
+                            quality = quality_list[quality['level'] - 1]
+                        else:
+                            logging.error(f"{songinfo['name']} 所有品质音源都下载失败")
+                            break
+                    if len(self.driver.window_handles)>1:#点击下载后如果弹出新窗口,就切换过去获取地址栏url再请求一次
+                        self.driver.switch_to.window(self.driver.window_handles[1])
+                        try:
+                            res1 = self.session.get(self.driver.current_url, headers=self.headers, cookies=self.cookies)
+                            print('歌曲res1:请求url:', res1.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
+                            if res1.status_code == 200:
+                                with open(songinfo['path'], "wb+") as f:
+                                    f.write(res1.content)
+                                break
+                            else:
+                                print(songinfo['name'],' res1(第二次)请求无效，响应码 :',res.status_code)
+                                raise Exception("连续两次请求无效,下载失败")
+                        finally:
+                            self.driver.close()
+                            self.driver.switch_to.window(self.driver.window_handles[0])
+                    else:
+                        WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
+                        if not os.path.exists(songinfo['path']):  # 如果没有同名歌曲就把文件名里的歌手名去掉
+                            os.rename(file_path, file_path.replace(' - ' + songinfo['singer'], ''))
+                        break
         except Exception as e:
-            logging.error(f"${songinfo['name']} 下载失败!",e)
+            if isinstance(e,TimeoutException):
+                logging.error(f"{songinfo['name']} 下载超时!")
+            else:
+                logging.error(f"{songinfo['name']} 下载失败!", e)
             self.failed_music.append(songinfo)
         return songinfo
 
@@ -188,19 +234,19 @@ class Download_netease_cloud_music():
         try:
             audio = ID3(songinfo['path'])
         except ID3NoHeaderError:
-            logging.error(f"${songinfo['path']}->没有ID3信息,新建中...")
+            logging.error(f"{songinfo['path']}->没有ID3信息,新建中...")
             try:
                 audio = mutagen.File(songinfo['path'], easy=False)
                 audio.add_tags()
             except mutagen.MutagenError:
                 os.remove(songinfo['path'])
-                logging.error(f"${songinfo['path']}->新建ID3信息失败,音频无效,已删除")
+                logging.error(f"{songinfo['path']}->新建ID3信息失败,音频无效,已删除")
                 if not songinfo in self.failed_music:
                     self.failed_music.append(songinfo)
                 return
             logging.error(f"新建ID3标签完成")
         except mutagen.MutagenError:
-            logging.error(f"${songinfo['path']}->没有这个文件")
+            logging.error(f"{songinfo['path']}->没有这个文件")
             if not songinfo in self.failed_music:
                 self.failed_music.append(songinfo)
             return
@@ -233,13 +279,13 @@ class Download_netease_cloud_music():
         for songinfo in songinfos:
             self.download_song(songinfo)  # 下载歌曲
             self.setSongInfo(songinfo)  # 添加ID3信息
-            print(f"${songinfo['name']} 处理完成")
+            print(f"{songinfo['name']} 处理完成")
         print("-----------下载失败或添加ID3信息失败的音乐:--------------")
         for i in self.failed_music:
             print(i.get('name'))
         print("-----------------------------------------------------")
 
-    def work(self, playlist=None):
+    def work(self):
         if not os.path.exists(dir_cover):
             os.makedirs(dir_cover)
             # s=sys.platform
@@ -247,13 +293,21 @@ class Download_netease_cloud_music():
             #     os.makedirs(dir_cover)
             # elif s=='linux':
             #     os.system('sudo mkdir -p %s'% dir_cover)
-        if playlist == None:
+        while not self.playlist:
             key_in = input("请输入要下载的歌单ID或链接:\n")
             if re.match('\d+',key_in):
-                playlist = key_in
+                self.playlist = key_in
             elif re.search('music.163.com/(#/)?playlist\?id=\d+',key_in):
-                playlist = re.search('id=\d+',key_in).group().replace('id=','')
-        songurls = self.get_songurls(playlist)  # 输入歌单编号，得到歌单所有歌曲的url
+                self.playlist = re.search('id=\d+',key_in).group().replace('id=','')
+            else:
+                print('无法识别歌单ID,请重新输入!')
+                continue
+            with open(config_path, 'r') as f:
+                config = json.loads(f.read())
+                config['playlist'] = self.playlist
+            with open(config_path, 'w') as f:
+                f.write(json.dumps(config))
+        songurls = self.get_songurls(self.playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
         while not self.music_quality:
             accept=input("输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
@@ -268,15 +322,18 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality['br']!='128K':
                 chrome_options = Options()
-                if not global_args['options'].get('s'):
+                if not global_args['options'].get('s') and not show_head:
                     chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_argument('--disable-gpu')
                 chrome_options.add_argument('--disable-dev-shm-usage')
                 chrome_options.add_argument("window-size=1024,768")
-                chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
+                prefs={"download.default_directory": os.path.abspath(dir_path), "download.prompt_for_download": False,
+                              "profile.default_content_setting_values.automatic_downloads":1}
+                chrome_options.add_experimental_option("prefs", prefs)
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 self.driver = webdriver.Chrome(options=chrome_options)
+                print('浏览器运行中...')
             self.handle(songinfos)
             while len(self.failed_music)!=0:
                 time.sleep(1)
@@ -331,5 +388,5 @@ if __name__ == '__main__':
     kargs,args = prase_args(sys.argv[1:])
     global_args['args']=args
     global_args['options']=kargs
-    d = Download_netease_cloud_music(username=kargs['u'],password=kargs['p'])
-    d.work(playlist = args[0])
+    d = Download_netease_cloud_music(args[0],username=kargs['u'],password=kargs['p'])
+    d.work()

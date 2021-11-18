@@ -17,6 +17,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
 
+show_head=True #调试时方便控制浏览器是否显示
 config_path = './config.json'
 dir_path = r'./MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
@@ -171,16 +172,18 @@ class Download_netease_cloud_music():
                 with open(songinfo['path_cover'], "wb+") as f:
                     f.write(res.content)
             except Exception as e:
-                logging.error(f"${songinfo['name']} 封面下载失败!")
+                logging.error(f"{songinfo['name']} 封面下载失败!")
         try:
+            if os.path.exists(songinfo['path']):
+                songinfo['path']=songinfo['path'].replace(songinfo['name'], songinfo['name']+' - '+songinfo['singer'])
+                if os.path.exists(songinfo['path']):
+                    os.remove(songinfo['path'])
             res = self.session.get(song_url, headers=self.headers,cookies=self.cookies)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-            if os.path.exists(songinfo['path']):
-                songinfo['path']=songinfo['path'].replace('.mp3',' .mp3')
-            if res.status_code==200:
+            if res.status_code==200:#请求内容有效,直接写入
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
-            else:
+            else: #请求状态不对,尝试在浏览器中直接点击下载
                 print(f'请求链接 {res.status_code} ,直接使用浏览器下载...')
                 quality = self.music_quality
                 if quality['desc'] == 'FLAC':
@@ -199,13 +202,31 @@ class Download_netease_cloud_music():
                         else:
                             logging.error(f"{songinfo['name']} 所有品质音源都下载失败")
                             break
-                WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
-                os.rename(file_path, file_path.replace(' - ' + songinfo['singer'], ''))
+                    if len(self.driver.window_handles)>1:#点击下载后如果弹出新窗口,就切换过去获取地址栏url再请求一次
+                        self.driver.switch_to.window(self.driver.window_handles[1])
+                        try:
+                            res1 = self.session.get(self.driver.current_url, headers=self.headers, cookies=self.cookies)
+                            print('歌曲res1:请求url:', res1.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
+                            if res1.status_code == 200:
+                                with open(songinfo['path'], "wb+") as f:
+                                    f.write(res1.content)
+                                break
+                            else:
+                                print(songinfo['name'],' res1(第二次)请求无效，响应码 :',res.status_code)
+                                raise Exception("连续两次请求无效,下载失败")
+                        finally:
+                            self.driver.close()
+                            self.driver.switch_to.window(self.driver.window_handles[0])
+                    else:
+                        WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
+                        if not os.path.exists(songinfo['path']):  # 如果没有同名歌曲就把文件名里的歌手名去掉
+                            os.rename(file_path, file_path.replace(' - ' + songinfo['singer'], ''))
+                        break
         except Exception as e:
             if isinstance(e,TimeoutException):
-                logging.error(f"${songinfo['name']} 下载超时!",e)
+                logging.error(f"{songinfo['name']} 下载超时!")
             else:
-                logging.error(f"${songinfo['name']} 下载失败!", e)
+                logging.error(f"{songinfo['name']} 下载失败!", e)
             self.failed_music.append(songinfo)
         return songinfo
 
@@ -213,19 +234,19 @@ class Download_netease_cloud_music():
         try:
             audio = ID3(songinfo['path'])
         except ID3NoHeaderError:
-            logging.error(f"${songinfo['path']}->没有ID3信息,新建中...")
+            logging.error(f"{songinfo['path']}->没有ID3信息,新建中...")
             try:
                 audio = mutagen.File(songinfo['path'], easy=False)
                 audio.add_tags()
             except mutagen.MutagenError:
                 os.remove(songinfo['path'])
-                logging.error(f"${songinfo['path']}->新建ID3信息失败,音频无效,已删除")
+                logging.error(f"{songinfo['path']}->新建ID3信息失败,音频无效,已删除")
                 if not songinfo in self.failed_music:
                     self.failed_music.append(songinfo)
                 return
             logging.error(f"新建ID3标签完成")
         except mutagen.MutagenError:
-            logging.error(f"${songinfo['path']}->没有这个文件")
+            logging.error(f"{songinfo['path']}->没有这个文件")
             if not songinfo in self.failed_music:
                 self.failed_music.append(songinfo)
             return
@@ -258,7 +279,7 @@ class Download_netease_cloud_music():
         for songinfo in songinfos:
             self.download_song(songinfo)  # 下载歌曲
             self.setSongInfo(songinfo)  # 添加ID3信息
-            print(f"${songinfo['name']} 处理完成")
+            print(f"{songinfo['name']} 处理完成")
         print("-----------下载失败或添加ID3信息失败的音乐:--------------")
         for i in self.failed_music:
             print(i.get('name'))
@@ -301,13 +322,15 @@ class Download_netease_cloud_music():
         try:
             if self.music_quality['br']!='128K':
                 chrome_options = Options()
-                if not global_args['options'].get('s'):
+                if not global_args['options'].get('s') and not show_head:
                     chrome_options.add_argument('--headless')  # 无窗口启动chrome
                 chrome_options.add_argument('–-no-sandbox')
                 chrome_options.add_argument('--disable-gpu')
                 chrome_options.add_argument('--disable-dev-shm-usage')
                 chrome_options.add_argument("window-size=1024,768")
-                chrome_options.add_experimental_option("prefs", {"download.default_directory": dir_path})
+                prefs={"download.default_directory": os.path.abspath(dir_path), "download.prompt_for_download": False,
+                              "profile.default_content_setting_values.automatic_downloads":1}
+                chrome_options.add_experimental_option("prefs", prefs)
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 self.driver = webdriver.Chrome(options=chrome_options)
                 print('浏览器运行中...')
