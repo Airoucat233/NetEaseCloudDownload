@@ -11,6 +11,8 @@
 1. `requests` 发送请求调用接口
 2. `mutagen` 修改音乐文件ID3信息
 3. `selenium` 网页自动化工具 PS:选择下载高音质(320K+)时需要用到此工具到[另一个站点](http://tool.liumingye.cn/music)搜索并下载(才不是因为我还没搞明白网易云API才这么弄的)
+## 参考
+- 登录功能是调用[该项目](https://github.com/Binaryify/NeteaseCloudMusicApi)的api,本项目中下载320K以上音质是调用浏览器点击别人网站间接获取歌曲url,更好的做法是参考该项目直接调用api(**Todo**)
 ## 使用
 ### 写在前面
 使用selenium库必须安装浏览器和相应版本的浏览器驱动(本项目中是`chrome`和`chromedriver`)这里给出Windows下的具体做法,linux下更为复杂可以参考[这篇文章](https://www.cnblogs.com/brady-wang/p/11977391.html)
