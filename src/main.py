@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
-sys.path.append('../util')
+sys.path.append('../')
 from util.tagAudio import modify
 
 show_head = False  # 调试时方便控制浏览器是否显示
