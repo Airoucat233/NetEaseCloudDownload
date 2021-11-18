@@ -61,7 +61,7 @@ python src\main.py --show-browser #显示浏览器操作(仅Windows下)
 ```
 4. 生成exe可执行程序
 ```
-env\Scripts\pyinstaller -F src/main.py
+env\Scripts\pyinstaller -F src/main.py --distpath <生成路径> -n <文件名>
 ```
 执行完成后再dist目录可以看到`main.exe`
 ### Linux
