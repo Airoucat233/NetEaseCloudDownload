@@ -1,6 +1,12 @@
 # NetEaseCloudDownload
+###更新日志
+2021-11-18:保存歌单ID至config.json,不必每次都输入歌单ID
 ## 简介
 这是一个批量下载网易云歌单的python脚本，主要功能是批量下载网易云歌单中所有**非VIP仅试听且没有下架的曲目(变灰）**，并且添加完整的ID3信息(标题,歌手,封面图)，可用于上传至云盘匹配曲库
+## 使用场景
+1. 在网易云听到喜欢的歌
+2. 收藏至一个专用待下载歌单,将该歌单ID根据程序运行提示输入下载整个歌单3
+3. 将下载的本地文件上传至云盘,清空待下载歌单待下次使用
 ## 主要依赖
 1. `requests` 发送请求调用接口
 2. `mutagen` 修改音乐文件ID3信息
@@ -48,6 +54,10 @@ pip install -r requirements.txt
 env\Scripts\python src\main.py       #设置了virtualenv
 
 python src\main.py      #没设置virtualenv
+
+# 一些选项
+python src\main.py <歌单ID或链接> -u <用户名> -p <密码>
+python src\main.py --show-browser #显示浏览器操作(仅Windows下)
 ```
 4. 生成exe可执行程序
 ```

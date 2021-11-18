@@ -4,6 +4,7 @@ import getopt
 import json
 import logging
 import mutagen
+from mutagen import MutagenError
 from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB ,ID3NoHeaderError
 import requests, os, time
 from requests.cookies import cookiejar_from_dict
@@ -16,16 +17,17 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
+from util.tagAudio import modify
 
 show_head=True #调试时方便控制浏览器是否显示
-config_path = './config.json'
-dir_path = r'./MusicDownLoad'
+config_path = 'config.json'
+dir_path = r'MusicDownLoad'
 dir_cover=dir_path + os.sep +"Cover"
 global_args= {'args':[],'options':{}}
 quality_list = [
-                {'level':0,'br': '128K', 'desc': '标准'},
-                {'level':1,'br': '320K', 'desc': '高品'},
-                {'level':2,'br': 'FLAC', 'desc': 'FLAC}'}
+                {'level':0,'br': '128K', 'desc': '标准','suffix':'.mp3'},
+                {'level':1,'br': '320K', 'desc': '高品','suffix':'.mp3'},
+                {'level':2,'br': 'FLAC', 'desc': 'FLAC','suffix':'.flac'}
 ]
 # def check_charset(file_path):
 #     with open(file_path, "rb") as f:
@@ -35,16 +37,14 @@ quality_list = [
 
 class Download_netease_cloud_music():
     def __init__(self,playlist,username,password):
+        if not os.path.exists(dir_cover):
+            os.makedirs(dir_cover)
         if not os.path.exists(config_path) or username!='':
             with open(config_path,'w') as f:
                 f.write(json.dumps({
-  "user":
-    {
-      "username": username,
-      "password": password
-    },
-  "playlist": playlist
-}))
+                  "user":{"username": username,"password": password},
+                  "playlist": playlist
+                }))
         with open(config_path, 'r') as f:
             config = json.loads(f.read())
         self.username=config.get('user').get('username')
@@ -61,6 +61,31 @@ class Download_netease_cloud_music():
         self.session.cookies=cookiejar_from_dict(self.cookies)
         self.failed_music = []
         self.music_quality = {}
+
+        while not self.playlist:
+            key_in = input("请输入要下载的歌单ID或链接:\n")
+            if re.match('\d+',key_in):
+                self.playlist = key_in
+            elif re.search('music.163.com/(#/)?playlist\?id=\d+',key_in):
+                self.playlist = re.search('id=\d+',key_in).group().replace('id=','')
+            else:
+                print('无法识别歌单ID,请重新输入!')
+                continue
+            with open(config_path, 'r') as f:
+                config = json.loads(f.read())
+                config['playlist'] = self.playlist
+            with open(config_path, 'w') as f:
+                f.write(json.dumps(config))
+        while not self.music_quality:
+            accept=input("输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
+            try:
+                if accept == '':
+                    self.music_quality = quality_list[1]
+                else:
+                    self.music_quality = quality_list[int(accept)-1]
+            except Exception:
+                print("输入无效请重新输入!")
+                time.sleep(0.2)
 
     def login(self):
         if not self.username or not self.password:
@@ -113,7 +138,7 @@ class Download_netease_cloud_music():
             songinfo['name']=sel.xpath("//em[@class='f-ff2']/text()").extract_first().replace('/','-').replace(':',' ').replace('"','“')
             songinfo['singer']='&'.join(sel.xpath("//p[@class='des s-fc4']/span/a/text()").extract())
             songinfo['album'] = sel.xpath('//p[text()="所属专辑："]/a/text()')[0].root
-            songinfo['path'] = dir_path + os.sep + songinfo['name'] + '.mp3'  # 文件路径
+            songinfo['path'] = dir_path + os.sep + songinfo['name'] + self.music_quality['suffix']  # 文件路径
             songinfo['path_cover'] = dir_cover+os.sep+songinfo['album'].replace(':',' ').replace('/','-').replace('"','“')+ '.jpg'# 封面路径
             if not os.path.exists(songinfo['path_cover']):
                 songinfo['cover_url']=sel.xpath('//img[@class="j-img"]/@data-src').extract_first()
@@ -180,17 +205,13 @@ class Download_netease_cloud_music():
                     os.remove(songinfo['path'])
             res = self.session.get(song_url, headers=self.headers,cookies=self.cookies)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-            if res.status_code==2000:#请求内容有效,直接写入
+            if res.status_code==200:#请求内容有效,直接写入
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
             else: #请求状态不对,尝试在浏览器中直接点击下载
                 print(f'请求链接 {res.status_code} ,直接使用浏览器下载...')
                 quality = self.music_quality
-                if quality['desc'] == 'FLAC':
-                    suffix = '.flac'
-                else:
-                    suffix = '.mp3'
-                file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + suffix)
+                file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + quality['suffix'])
                 while quality['level'] >= 0:
                     try:
                         element = self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc'])
@@ -231,50 +252,71 @@ class Download_netease_cloud_music():
         return songinfo
 
     def setSongInfo(self,songinfo):
+        print(f'添加歌曲 {songinfo["name"]} 的标签信息...')
         try:
-            audio = ID3(songinfo['path'])
-        except ID3NoHeaderError:
-            logging.error(f"{songinfo['path']}->没有ID3信息,新建中...")
-            try:
-                audio = mutagen.File(songinfo['path'], easy=False)
-                audio.add_tags()
-            except mutagen.MutagenError:
-                os.remove(songinfo['path'])
-                logging.error(f"{songinfo['path']}->新建ID3信息失败,音频无效,已删除")
-                if not songinfo in self.failed_music:
-                    self.failed_music.append(songinfo)
-                return
-            logging.error(f"新建ID3标签完成")
+            modify(songinfo['path'],
+                   title=songinfo['name'],
+                   artist=songinfo['singer'],
+                   album=songinfo['album'],
+                   img_path=songinfo.get('path_cover'))
         except mutagen.MutagenError:
-            logging.error(f"{songinfo['path']}->没有这个文件")
-            if not songinfo in self.failed_music:
-                self.failed_music.append(songinfo)
-            return
-        audio.update_to_v23()  # 把可能存在的旧版本升级为2.3
-        if os.path.exists(songinfo['path_cover']):
-            img = open(songinfo['path_cover'], 'rb')
-            s=img.read()
-            img.close()
-            audio['APIC'] = APIC(  # 插入专辑图片
-                encoding=3,
-                mime='image/jpeg',
-                type=3,
-                desc=u'Cover',
-                data=s
-            )
-        audio['TIT2'] = TIT2(  # 插入歌名
-            encoding=3,
-            text=[songinfo['name']]
-        )
-        audio['TPE1'] = TPE1(  # 插入第一演奏家、歌手、等
-            encoding=3,
-            text=[songinfo['singer']]
-        )
-        audio['TALB'] = TALB(  # 插入专辑名称
-            encoding=3,
-            text=[songinfo['album']]
-        )
-        audio.save()  # 记得要保存
+            os.remove(songinfo['path'])
+            logging.error(f"{songinfo['path']}->添加标签信息失败,音频无效,已删除")
+        except Exception as e:
+            print(e)
+        # try:
+        #     audio = ID3(songinfo['path'])
+        # except ID3NoHeaderError:
+        #     print(f"{songinfo['path']}->没有ID3信息,新建中...")
+        #     try:
+        #         audio = mutagen.File(songinfo['path'], easy=False)
+        #         if not hasattr(audio,'tags'):
+        #             audio.add_tags()
+        #     except mutagen.MutagenError:
+        #         os.remove(songinfo['path'])
+        #         logging.error(f"{songinfo['path']}->新建ID3信息失败,音频无效,已删除")
+        #         if not songinfo in self.failed_music:
+        #             self.failed_music.append(songinfo)
+        #         return
+        #     print(f"新建ID3标签完成")
+        # except mutagen.MutagenError:
+        #     logging.error(f"{songinfo['path']}->没有这个文件")
+        #     if not songinfo in self.failed_music:
+        #         self.failed_music.append(songinfo)
+        #     return
+        # if isinstance(audio,mutagen.mp3.MP3):
+        #     audio.update_to_v23()  # 把可能存在的旧版本升级为2.3
+        #
+        # if os.path.exists(songinfo['path_cover']):
+        #     img = open(songinfo['path_cover'], 'rb')
+        #     s=img.read()
+        #     img.close()
+
+        # if os.path.exists(songinfo['path_cover']):
+        #     img = open(songinfo['path_cover'], 'rb')
+        #     s=img.read()
+        #     img.close()
+        #
+        #     audio['APIC'] = APIC(  # 插入专辑图片
+        #         encoding=3,
+        #         mime='image/jpeg',
+        #         type=3,
+        #         desc=u'Cover',
+        #         data=s
+        #     )
+        # audio['TIT2'] = TIT2(  # 插入歌名
+        #     encoding=3,
+        #     text=[songinfo['name']]
+        # )
+        # audio['TPE1'] = TPE1(  # 插入第一演奏家、歌手、等
+        #     encoding=3,
+        #     text=[songinfo['singer']]
+        # )
+        # audio['TALB'] = TALB(  # 插入专辑名称
+        #     encoding=3,
+        #     text=[songinfo['album']]
+        # )
+        #audio.save()  # 记得要保存
     def handle(self,songinfos):
         for songinfo in songinfos:
             self.download_song(songinfo)  # 下载歌曲
@@ -286,39 +328,9 @@ class Download_netease_cloud_music():
         print("-----------------------------------------------------")
 
     def work(self):
-        if not os.path.exists(dir_cover):
-            os.makedirs(dir_cover)
-            # s=sys.platform
-            # if s=='win32':
-            #     os.makedirs(dir_cover)
-            # elif s=='linux':
-            #     os.system('sudo mkdir -p %s'% dir_cover)
-        while not self.playlist:
-            key_in = input("请输入要下载的歌单ID或链接:\n")
-            if re.match('\d+',key_in):
-                self.playlist = key_in
-            elif re.search('music.163.com/(#/)?playlist\?id=\d+',key_in):
-                self.playlist = re.search('id=\d+',key_in).group().replace('id=','')
-            else:
-                print('无法识别歌单ID,请重新输入!')
-                continue
-            with open(config_path, 'r') as f:
-                config = json.loads(f.read())
-                config['playlist'] = self.playlist
-            with open(config_path, 'w') as f:
-                f.write(json.dumps(config))
+
         songurls = self.get_songurls(self.playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
-        while not self.music_quality:
-            accept=input("输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
-            try:
-                if accept == '':
-                    self.music_quality = quality_list[1]
-                else:
-                    self.music_quality = quality_list[int(accept)-1]
-            except Exception:
-                print("输入无效请重新输入!")
-                time.sleep(0.5)
         try:
             if self.music_quality['br']!='128K':
                 chrome_options = Options()
