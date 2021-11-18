@@ -14,7 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from src.util.tagAudio import modify
+from util.tagAudio import modify
 
 show_head=True #调试时方便控制浏览器是否显示
 config_path = 'config.json'
@@ -136,7 +136,7 @@ class Download_netease_cloud_music():
             songinfo['singer']='&'.join(sel.xpath("//p[@class='des s-fc4']/span/a/text()").extract())
             songinfo['album'] = sel.xpath('//p[text()="所属专辑："]/a/text()')[0].root
             songinfo['path'] = dir_path + os.sep + songinfo['name'] + self.music_quality['suffix']  # 文件路径
-            songinfo['path_cover'] = dir_cover+os.sep+songinfo['album'].replace(':',' ').replace('/','-').replace('"','“')+ '.jpg'# 封面路径
+            songinfo['path_cover'] = dir_cover+os.sep+songinfo['album'].replace(':',' ').replace('/','-').replace('"','“').replace('<','-').replace('>','-')+ '.jpg'# 封面路径
             if not os.path.exists(songinfo['path_cover']):
                 songinfo['cover_url']=sel.xpath('//img[@class="j-img"]/@data-src').extract_first()
             #songname = singer + '-' + song_name

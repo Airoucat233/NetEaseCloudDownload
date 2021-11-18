@@ -4,7 +4,7 @@
 # @Filename: tagAudio.py
 
 from mutagen.flac import FLAC,Picture
-from mutagen.id3 import ID3, APIC, TIT2, TPE1, TDRC, TCON
+from mutagen.id3 import ID3, APIC, TIT2, TPE1, TDRC, TCON, TALB
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4, MP4Cover
 
@@ -35,7 +35,7 @@ def modify(file_path, title='',artist='',album='',img_path=None,others:dict= Non
             )
         audio.tags["TIT2"] = TIT2(encoding=3, text=title)
         audio.tags["TPE1"] = TPE1(encoding=3, text=artist)
-        audio.tags["TALB"] = TPE1(encoding=3, text=album)
+        audio.tags["TALB"] = TALB(encoding=3, text=album)
         audio.save()
     elif (file_path.endswith('.flac')):
         audio = FLAC(file_path)
