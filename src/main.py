@@ -233,7 +233,7 @@ class Download_netease_cloud_music():
                     os.remove(songinfo['path'])
             res = self.session.get(song_url, headers=self.headers, cookies=self.cookies)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-            if res.status_code == 2000:  # 请求内容有效,直接写入
+            if res.status_code == 200:  # 请求内容有效,直接写入
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
             else:  # 请求状态不对,尝试在浏览器中直接点击下载
