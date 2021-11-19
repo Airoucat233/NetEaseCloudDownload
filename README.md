@@ -17,7 +17,7 @@
 - 登录功能是调用[该项目](https://github.com/Binaryify/NeteaseCloudMusicApi)的api,本项目中下载320K以上音质是调用浏览器点击别人网站间接获取歌曲url,更好的做法是参考该项目直接调用api(**Todo**)
 ## 使用
 ### 写在前面
-使用selenium库必须安装浏览器和相应版本的浏览器驱动(本项目中是`chrome`和`chromedriver`)这里给出Windows下的具体做法,linux下更为复杂可以参考[这篇文章](https://www.cnblogs.com/brady-wang/p/11977391.html)
+使用selenium库必须安装浏览器和相应版本的浏览器驱动(本项目中是`chrome`和`chromedriver`这里给出Windows下的具体做法,linux下更为复杂可以参考[这篇文章](https://www.cnblogs.com/brady-wang/p/11977391.html)
 1. 安装chrome浏览器,如果已经安装,查看一下版本号
 2. 到[chromedriver镜像站](http://npm.taobao.org/mirrors/chromedriver/)相应版本目录下下载`chromedriver_win32.zip`
 3. 解压后将`chromedriver.exe`放到python根目录下(注意区分是否virtualenv,见下文)
