@@ -42,13 +42,15 @@ class Download_netease_cloud_music():
             with open(config_path, 'w') as f:
                 f.write(json.dumps({
                     "user": {"username": username, "password": password},
-                    "playlist": playlist
-                }))
+                    "playlist": playlist,
+                    "filename_rep_rule":{':':' ','/':'-','"':'“','<':'(','>':')'}
+                },indent=4))
         with open(config_path, 'r') as f:
             config = json.loads(f.read())
         self.username = config.get('user').get('username')
         self.password = config.get('user').get('password')
         self.playlist = config.get('playlist')
+        self.filename_rep_rule = config.get('filename_rep_rule')
         self.cookies = ''
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -74,7 +76,7 @@ class Download_netease_cloud_music():
                 config = json.loads(f.read())
                 config['playlist'] = self.playlist
             with open(config_path, 'w') as f:
-                f.write(json.dumps(config))
+                f.write(json.dumps(config,indent=4))
         while not self.music_quality:
             accept = input(
                 "输入相应数字设置下载音乐的音质,直接输入回车默认320K：\n(注意:选择128K以上音质需要调用浏览器,速度会慢一些)\n  1、128Kbps  2、320Kbps  3、FLAC\n")
@@ -97,7 +99,7 @@ class Download_netease_cloud_music():
                 config['user']['username'] = self.username
                 config['user']['password'] = self.password
             with open(config_path, 'w') as f:
-                f.write(json.dumps(config))
+                f.write(json.dumps(config,indent=4))
         t = int(time.time())
         url = 'https://netease-cloud-music-api-gamma-orpin.vercel.app/login/cellphone'
         url += "?timestamp=" + str(t)
@@ -127,6 +129,14 @@ class Download_netease_cloud_music():
         return songurls  # 所有歌曲组成的list
         # ['/song?id=64006', '/song?id=63959', '/song?id=25642714', '/song?id=63914', '/song?id=4878122', '/song?id=63650']
 
+    def replace_sepecial_char(self,string:str,rule_map:dict):
+        new_str=string
+        if rule_map:
+            for k in rule_map.keys():
+                new_str=new_str.replace(k,rule_map[k])
+        else:
+            logging.error('没有特殊字符替换字典,可能会发生由于文件名有特殊字符而创建失败的情况,请检查配置文件!')
+        return new_str
     def get_songinfos(self, songurls):
         songinfos = []
         for songurl in songurls:
@@ -136,14 +146,14 @@ class Download_netease_cloud_music():
             sel = Selector(text=re.text)
             songinfo = {}
             songinfo['id'] = url.split('=')[1]
-            songinfo['name'] = sel.xpath("//em[@class='f-ff2']/text()").extract_first().replace('/', '-').replace(':',
-                                                                                                                  ' ').replace(
-                '"', '“')
+            songinfo['name'] = sel.xpath("//em[@class='f-ff2']/text()").extract_first()
+            songinfo['song_file_name']=self.replace_sepecial_char(songinfo['name'],self.filename_rep_rule)
             songinfo['singer'] = '&'.join(sel.xpath("//p[@class='des s-fc4']/span/a/text()").extract())
+            songinfo['singer_file_name'] = self.replace_sepecial_char(songinfo['singer'], self.filename_rep_rule)
             songinfo['album'] = sel.xpath('//p[text()="所属专辑："]/a/text()')[0].root
-            songinfo['path'] = dir_path + os.sep + songinfo['name'] + self.music_quality['suffix']  # 文件路径
-            songinfo['path_cover'] = dir_cover + os.sep + songinfo['album'].replace(':', ' ').replace('/', '-').replace(
-                '"', '“') + '.jpg'  # 封面路径
+            songinfo['album_file_name'] = self.replace_sepecial_char(songinfo['album'], self.filename_rep_rule)
+            songinfo['path'] = dir_path + os.sep + songinfo['song_file_name'] + self.music_quality['suffix']  # 文件路径
+            songinfo['path_cover'] = dir_cover + os.sep + songinfo['album_file_name'] + '.jpg'  # 封面路径
             if not os.path.exists(songinfo['path_cover']):
                 songinfo['cover_url'] = sel.xpath('//img[@class="j-img"]/@data-src').extract_first()
             # songname = singer + '-' + song_name
@@ -187,8 +197,18 @@ class Download_netease_cloud_music():
             print('歌曲  ', song_name, '-', singer, ' 没有匹配结果')
 
         except Exception as e:
-            logging.error("浏览器操作期间发生了错误-->", e)
+            logging.error(f"浏览器操作 获取 {song_name} - {singer} 期间发生了错误-->", e)
 
+    def generate_pattern(self,match_str):
+        pattern = ''
+        for c in match_str:
+            if c in ['\\', '/', '*', '?', '"', '<', '>', '|']:
+                pattern += '.'
+            elif c in ['.', '+']:
+                pattern += f'\{c}'
+            else:
+                pattern += c
+        return pattern
     def download_song(self, songinfo):
         '''根据歌曲url，下载mp3文件'''
         # songinfo= self.get_songinfo(songurl)  # 根据歌曲url得出ID、歌名
@@ -207,13 +227,13 @@ class Download_netease_cloud_music():
                 logging.error(f"{songinfo['name']} 封面下载失败!")
         try:
             if os.path.exists(songinfo['path']):
-                songinfo['path'] = songinfo['path'].replace(songinfo['name'],
-                                                            songinfo['name'] + ' - ' + songinfo['singer'])
+                songinfo['path'] = songinfo['path'].replace(songinfo['song_file_name'],
+                                                            songinfo['song_file_name'] + ' - ' + songinfo['singer_file_name'])
                 if os.path.exists(songinfo['path']):
                     os.remove(songinfo['path'])
             res = self.session.get(song_url, headers=self.headers, cookies=self.cookies)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-            if res.status_code == 200:  # 请求内容有效,直接写入
+            if res.status_code == 2000:  # 请求内容有效,直接写入
                 with open(songinfo['path'], "wb+") as f:
                     f.write(res.content)
             else:  # 请求状态不对,尝试在浏览器中直接点击下载
@@ -221,9 +241,11 @@ class Download_netease_cloud_music():
                 quality = self.music_quality
                 file_path = os.path.join(dir_path, songinfo['name'] + ' - ' + songinfo['singer'] + quality['suffix'])
                 while quality['level'] >= 0:
+                    if quality['level']!=self.music_quality['level']:#如果音质自动调节并且后缀名变了，要更新文件名
+                        songinfo['path'] = songinfo['path'].replace(self.music_quality['suffix'],quality['suffix'])
+                        file_path = file_path.replace(self.music_quality['suffix'],quality['suffix'])
                     try:
-                        element = self.driver.find_element(By.XPATH,
-                                                           "//label[text()='%s']/../../div[2]/a" % quality['desc'])
+                        element = self.driver.find_element(By.XPATH,"//label[text()='%s']/../../div[2]/a" % quality['desc'])
                         self.driver.execute_script('arguments[0].click()', element)
                     except Exception:
                         print(f"{songinfo['name']} 没有 {quality['br']} 音质的下载源,尝试切换低一级音质...")
@@ -237,7 +259,7 @@ class Download_netease_cloud_music():
                         try:
                             res1 = self.session.get(self.driver.current_url, headers=self.headers, cookies=self.cookies)
                             print('歌曲res1:请求url:', res1.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-                            if res1.status_code == 200:
+                            if res1.status_code == 2000:
                                 with open(songinfo['path'], "wb+") as f:
                                     f.write(res1.content)
                                 break
@@ -248,9 +270,13 @@ class Download_netease_cloud_music():
                             self.driver.close()
                             self.driver.switch_to.window(self.driver.window_handles[0])
                     else:
-                        WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
+                        if songinfo['name']==songinfo['song_file_name'] and songinfo['singer']==songinfo['singer_file_name']:
+                            WebDriverWait(self.driver, 12).until(lambda d: os.path.exists(file_path))
+                        else:
+                            pattern = self.generate_pattern(songinfo['name'] + ' - ' + songinfo['singer'] + quality['suffix'])
+                            file_path = wait_for_downloading(dir_path,12,pattern)
                         if not os.path.exists(songinfo['path']):  # 如果没有同名歌曲就把文件名里的歌手名去掉
-                            os.rename(file_path, file_path.replace(' - ' + songinfo['singer'], ''))
+                            os.rename(file_path, songinfo['path'])
                         break
         except Exception as e:
             if isinstance(e, TimeoutException):
@@ -329,16 +355,18 @@ class Download_netease_cloud_music():
 
     def handle(self, songinfos):
         for songinfo in songinfos:
-            self.download_song(songinfo)  # 下载歌曲
-            self.setSongInfo(songinfo)  # 添加ID3信息
-            print(f"{songinfo['name']} 处理完成")
+            try:
+                self.download_song(songinfo)  # 下载歌曲
+                self.setSongInfo(songinfo)  # 添加ID3信息
+                print(f"{songinfo['name']} 处理完成")
+            except Exception as e:
+                print(f"{songinfo['name']} 处理期间发生错误!\n",e)
         print("-----------下载失败或添加ID3信息失败的音乐:--------------")
         for i in self.failed_music:
             print(i.get('name'))
         print("-----------------------------------------------------")
 
     def work(self):
-
         songurls = self.get_songurls(self.playlist)  # 输入歌单编号，得到歌单所有歌曲的url
         songinfos = self.get_songinfos(songurls)
         try:
@@ -406,7 +434,24 @@ def prase_args(argv):
     if args == []:
         args.append(None)
     return kargs, args
-
+#等待文件下载完成
+def wait_for_downloading(file_dir, wait_max_time, pattern=None):
+    file_not_found = True
+    end_time = time.time() + wait_max_time  # 设置下载超时时间
+    while file_not_found:
+        if (time.time() >= end_time):
+            raise TimeoutException
+        elif pattern == None:
+            if os.path.exists(file_dir):
+                file_not_found = False
+        else:
+            files = os.listdir(file_dir)
+            for i in range(0, len(files)):
+                if re.match(pattern, files[i]):
+                    if not files[i].__contains__('.crdownload'):
+                        file_not_found = False
+                        return os.path.join(file_dir, files[i])
+                    # print(re.search(file_reg,os.path.splitext(files[i])[0]))
 
 if __name__ == '__main__':
     kargs, args = prase_args(sys.argv[1:])
