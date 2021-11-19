@@ -16,6 +16,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from util.tagAudio import modify
 
+version = 'v1.6'
 show_head = False  # 调试时方便控制浏览器是否显示
 config_path = 'config.json'
 dir_path = r'MusicDownLoad'
@@ -28,28 +29,26 @@ quality_list = [
 ]
 
 
-# def check_charset(file_path):
-#     with open(file_path, "rb") as f:
-#         data = f.read(4)
-#         charset = chardet.detect(data)['encoding']
-#     return charset
+
 
 class Download_netease_cloud_music():
     def __init__(self, playlist, username, password):
         if not os.path.exists(dir_cover):
             os.makedirs(dir_cover)
-        if not os.path.exists(config_path) or username != '':
-            with open(config_path, 'w') as f:
-                f.write(json.dumps({
-                    "user": {"username": username, "password": password},
-                    "playlist": playlist,
-                    "filename_rep_rule":{':':' ','/':'-','"':'“','<':'(','>':')'}
-                },indent=4))
-        with open(config_path, 'r') as f:
-            config = json.loads(f.read())
-        self.username = config.get('user').get('username')
-        self.password = config.get('user').get('password')
-        self.playlist = config.get('playlist')
+        config = check_config(config_path)
+        if username:
+            self.username = username
+        else:
+            self.username = config.get('user').get('username')
+        if password:
+            self.password = password
+        else:
+            self.password = config.get('user').get('password')
+        if playlist:
+            self.playlist = playlist
+        else:
+            self.playlist = config.get('playlist')
+
         self.filename_rep_rule = config.get('filename_rep_rule')
         self.cookies = ''
         self.headers = {
@@ -94,12 +93,6 @@ class Download_netease_cloud_music():
             if not self.username:
                 self.username = input('请输入用户名:')
             self.password = input('请输入密码:')
-            with open(config_path, 'r') as f:
-                config = json.loads(f.read())
-                config['user']['username'] = self.username
-                config['user']['password'] = self.password
-            with open(config_path, 'w') as f:
-                f.write(json.dumps(config,indent=4))
         t = int(time.time())
         url = 'https://netease-cloud-music-api-gamma-orpin.vercel.app/login/cellphone'
         url += "?timestamp=" + str(t)
@@ -108,7 +101,12 @@ class Download_netease_cloud_music():
         json_obj = json.loads(res.text)
         if json_obj.get('code') == 200:
             print('登录成功')
-
+            with open(config_path, 'r') as f:
+                config = json.loads(f.read())
+                config['user']['username'] = self.username
+                config['user']['password'] = self.password
+            with open(config_path, 'w') as f:
+                f.write(json.dumps(config, indent=4))
             self.cookies = self.getCookieDict(json_obj.get('cookie'))
 
     def getCookieDict(self, cook):
@@ -411,7 +409,7 @@ def prase_args(argv):
     -p : 密码
     --show-browser 下载高音质时显示调用浏览器操作
     """
-    kargs = {'u': '', 'p': '', 's': False}
+    kargs = {'u': None, 'p': None, 's': False}
     args = []
     try:
         opts, args = getopt.getopt(argv, "u:p:", ["help", "show-browser"])
@@ -434,6 +432,40 @@ def prase_args(argv):
     if args == []:
         args.append(None)
     return kargs, args
+#检查配置文件
+def check_config(config_path):
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                    config = json.loads(f.read())
+        except Exception:
+            print("配置文件打开错误!")
+            raise
+    else:
+        with open(config_path, 'w') as f:
+            config = {
+                "version": version,
+                "user": {"username": '', "password": ''},
+                "playlist": '',
+                "filename_rep_rule": {':': ' ', '/': '_', '"': '“', '<': '(', '>': ')', '\\': '-', '*': '_', '?': '？','|': '_', }
+            }
+            f.write(json.dumps(config,indent=4))
+            return  config
+    if config.get('version') and config['version'] == version:
+       return config
+    else:#版本不对就更新config
+        new_config = {
+                    "version":version,
+                    "user": {"username": config.get('user').get('username'), "password": config.get('user').get('password')},
+                    "playlist": config.get('playlist'),
+                    "filename_rep_rule":{':':' ','/':'_','"':'“','<':'(','>':')','\\':'-','*':'_','?':'？','|':'_',}
+                }
+        with open(config_path.replace('config.json','config_bak.json'), "w") as f:
+            f.write(json.dumps(config,indent=4))
+
+        with open(config_path, "w") as f:
+            f.write(json.dumps(new_config,indent=4))
+        return config
 #等待文件下载完成
 def wait_for_downloading(file_dir, wait_max_time, pattern=None):
     file_not_found = True
