@@ -20,11 +20,9 @@
 2. 到[chromedriver镜像站](http://npm.taobao.org/mirrors/chromedriver/)相应版本目录下下载`chromedriver_win32.zip`
 3. 解压后将`chromedriver.exe`放到python根目录下(注意区分是否virtualenv,见下文)
 ### Windows
-#### 下载打包后的exe可执行文件双击运行
-```
-
-```
-#### 直接运行源码
+#### 方法一：下载打包后的exe可执行文件双击运行
+到[realese页面](https://github.com/Airoucat233/NetEaseCloudDownload/releases/latest)直接下载最新版本
+#### 方法二：直接运行源码
 1. 命令行下通过git下载本项目源码并进入该目录(我用的CMD而不是Git bash)
 ```
 git clone https://github.com/Airoucat233/NetEaseCloudDownload.git
