@@ -60,6 +60,7 @@ class Download_netease_cloud_music():
             self.cookies = config.get('cookies')
         else:
             self.login()
+        self.test_login_status()
         self.filename_rep_rule = config.get('filename_rep_rule')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -97,6 +98,11 @@ class Download_netease_cloud_music():
                 print("输入无效请重新输入!")
                 time.sleep(0.2)
 
+    def test_login_status(self):
+        url = f'{host}/song/download/url'
+        url += "?timestamp=" + str(int(time.time()))
+        res = requests.post(url, data={"id": "1335797413"})
+        print(res)
     def login(self):
         if not self.username or not self.password:
             if not self.username:
@@ -104,8 +110,8 @@ class Download_netease_cloud_music():
             self.password = input('请输入密码:')
         t = int(time.time())
         url = f'{host}/login/cellphone'
-        url += "?timestamp=" + str(t)
-        res = requests.post(url, data={f"phone": f"{self.username}",
+        # url += "?timestamp=" + str(t)
+        res = requests.post(url, data={"phone": f"{self.username}",
                                        "password": f"{self.password}"})
         json_obj = json.loads(res.text)
         if json_obj.get('code') == 200:
