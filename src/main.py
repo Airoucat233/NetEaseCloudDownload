@@ -34,6 +34,7 @@ default_config = {
     "cookies": {},
     "filename_rep_rule": {':': ' ', '/': '_', '"': '“', '<': '(', '>': ')', '\\': '-', '*': '_', '?': '？','|': '_', }
 }
+host = 'http://127.0.0.1:3000'
 
 
 
@@ -58,12 +59,11 @@ class Download_netease_cloud_music():
         if config.get('cookies'):
             self.cookies = config.get('cookies')
         else:
-            self.cookies = {}
+            self.login()
         self.filename_rep_rule = config.get('filename_rep_rule')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
             'Referer': 'http://music.163.com/'}
-        self.login()
         self.main_url = 'http://music.163.com/'
         self.session = requests.Session()
         self.session.headers = self.headers
@@ -103,10 +103,10 @@ class Download_netease_cloud_music():
                 self.username = input('请输入用户名:')
             self.password = input('请输入密码:')
         t = int(time.time())
-        url = 'http://120.76.136.212:3000/login/cellphone'
+        url = f'{host}/login/cellphone'
         url += "?timestamp=" + str(t)
-        res = requests.post(url, data={f"phone": f"{self.username}", "password": f"{self.password}"},
-                            headers={"Content-Type": "application/x-www-form-urlencoded;charset=utf-8"})
+        res = requests.post(url, data={f"phone": f"{self.username}",
+                                       "password": f"{self.password}"})
         json_obj = json.loads(res.text)
         if json_obj.get('code') == 200:
             print('登录成功')
@@ -157,7 +157,7 @@ class Download_netease_cloud_music():
             songinfo['id'] = url.split('=')[1]
             songinfo['name'] = sel.xpath("//em[@class='f-ff2']/text()").extract_first()
             songinfo['song_file_name']=self.replace_sepecial_char(songinfo['name'],self.filename_rep_rule)
-            songinfo['singer'] = '&'.join(sel.xpath("//p[@class='des s-fc4']/span/a/text()").extract())
+            songinfo['singer'] = '&'.join(sel.xpath("//p[@class='des s-fc4']/span/*/text()").extract())
             songinfo['singer_file_name'] = self.replace_sepecial_char(songinfo['singer'], self.filename_rep_rule)
             songinfo['album'] = sel.xpath('//p[text()="所属专辑："]/a/text()')[0].root
             songinfo['album_file_name'] = self.replace_sepecial_char(songinfo['album'], self.filename_rep_rule)
@@ -174,39 +174,50 @@ class Download_netease_cloud_music():
 
     def found_at_least_one(self, driver):  # 供WebDriverWait.until调用
         return len(driver.find_elements(By.XPATH, "//div[@id=\'player\']/div/ol/li")) > 0
+    def song_list_has_changed(self, driver,pre_value):  # 供WebDriverWait.until调用
+        return len(driver.find_elements(By.XPATH, "//div[@id=\'player\']/div/ol/li")) != pre_value
 
     def get_high_quality(self, driver, song_name, singer, quality):
         url = 'http://tool.liumingye.cn/music/?page=audioPage&type=YQD&name=%s' % song_name
-
+        driver.get(url)
         try:
-            driver.get(url)
+            times = 1
+            index = 0
             WebDriverWait(driver, 15).until(self.found_at_least_one)  # //div[text()="这里有点空哦…"]
-            elements = driver.find_elements(By.XPATH, "//div[@id='player']/div/ol/li")
-            # if len(elements) > 0:
-            print('在搜索结果中匹配...')
-            print('歌名            ', '            歌手', '           匹配结果')
-            for el in elements:
-                name = el.find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
-                author = el.find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
-                if name == song_name and self.remove_sep(author) == self.remove_sep(singer):
-                    print(name, '     ', author, '        ', '          成功')
-                    dl_button = el.find_element(By.XPATH, "span[@class='aplayer-list-download iconfont icon-xiazai']")
-                    # ActionChains(driver).move_to_element(dl_button).click().perform()
-                    driver.execute_script('arguments[0].click()', dl_button)
-                    WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, 'm-download')))
-                    while quality['level'] >= 0:
-                        download_url = driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality[
-                            'desc']).get_attribute("value")
-                        if download_url == '' and quality['level'] != 0:
-                            quality = quality_list[quality['level'] - 1]
-                        else:
-                            return download_url
+            while times <= 3:
+                elements = driver.find_elements(By.XPATH, "//div[@id='player']/div/ol/li")
+                list_len = len(elements)
+                print('在搜索结果中匹配...')
+                print('歌名                       ', '歌手          ', '目标歌手            '+'匹配结果')
+                for i in range(index,list_len):
+                    name = elements[i].find_element(By.XPATH, "span[@class='aplayer-list-title']").get_attribute("textContent")
+                    author = elements[i].find_element(By.XPATH, "span[@class='aplayer-list-author']").get_attribute("textContent")
+                    if name.strip() == song_name.strip() and self.remove_sep(author) == self.remove_sep(singer):
+                        print(name, '               ', author, '      ',singer, '         成功')
+                        dl_button = elements[i].find_element(By.XPATH, "span[@class='aplayer-list-download iconfont icon-xiazai']")
+                        # ActionChains(driver).move_to_element(dl_button).click().perform()
+                        driver.execute_script('arguments[0].click()', dl_button)
+                        WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, 'm-download')))
+                        while quality['level'] >= 0:
+                            download_url = driver.find_element(By.XPATH, "//label[text()='%s']/../../input" % quality[
+                                'desc']).get_attribute("value")
+                            if download_url == '' and quality['level'] != 0:
+                                quality = quality_list[quality['level'] - 1]
+                            else:
+                                return download_url
+                    else:
+                        print(name, '               ', author, '      ',singer, '         失败')
+                if driver.find_element(By.XPATH,'//div[@class="aplayer-more"]').text == '没有了':
+                    print('歌曲  ', song_name, '-', singer, ' 没有匹配结果')
                 else:
-                    print(name, '     ', author, '        ', '          失败')
-            print('歌曲  ', song_name, '-', singer, ' 没有匹配结果')
+                    driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+                    driver.find_element(By.XPATH, '//div[@class="aplayer-more"]').click()
+                    WebDriverWait(driver, 8).until(lambda d:self.song_list_has_changed(d,list_len))
+                    index = list_len
 
         except Exception as e:
-            logging.error(f"浏览器操作 获取 {song_name} - {singer} 期间发生了错误-->", e)
+            print(f"浏览器操作 获取 {song_name} - {singer} 期间发生了错误-->", e)
+            raise
 
     def generate_pattern(self,match_str):
         pattern = ''
@@ -221,26 +232,27 @@ class Download_netease_cloud_music():
     def download_song(self, songinfo):
         '''根据歌曲url，下载mp3文件'''
         # songinfo= self.get_songinfo(songurl)  # 根据歌曲url得出ID、歌名
-        if self.music_quality['br'] == '128K':
-            song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
-        else:
-            song_url = self.get_high_quality(self.driver, songinfo['name'], songinfo['singer'], self.music_quality)
-
-        if songinfo.get('cover_url'):  # 避免重复下载同一个专辑封面
-            try:
-                res = self.session.get(songinfo['cover_url'], headers=self.headers, cookies=self.cookies)
-                print('封面res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
-                with open(songinfo['path_cover'], "wb+") as f:
-                    f.write(res.content)
-            except Exception as e:
-                logging.error(f"{songinfo['name']} 封面下载失败!")
         try:
+            if self.music_quality['br'] == '128K':
+                song_url = 'http://music.163.com/song/media/outer/url?id=%s.mp3' % songinfo['id']
+            else:
+                song_url = self.get_high_quality(self.driver, songinfo['name'], songinfo['singer'], self.music_quality)
+            if song_url == None:
+                raise Exception('歌曲url获取失败')
+            if songinfo.get('cover_url'):  # 避免重复下载同一个专辑封面
+                try:
+                    res = self.session.get(songinfo['cover_url'])
+                    print('封面res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
+                    with open(songinfo['path_cover'], "wb+") as f:
+                        f.write(res.content)
+                except Exception as e:
+                    print(f"{songinfo['name']} 封面下载失败!",str(e))
             if os.path.exists(songinfo['path']):
                 songinfo['path'] = songinfo['path'].replace(songinfo['song_file_name'],
                                                             songinfo['song_file_name'] + ' - ' + songinfo['singer_file_name'])
                 if os.path.exists(songinfo['path']):
                     os.remove(songinfo['path'])
-            res = self.session.get(song_url, headers=self.headers, cookies=self.cookies)
+            res = self.session.get(song_url)
             print('歌曲res:请求url:', res.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
             if res.status_code == 200:  # 请求内容有效,直接写入
                 with open(songinfo['path'], "wb+") as f:
@@ -266,7 +278,7 @@ class Download_netease_cloud_music():
                     if len(self.driver.window_handles) > 1:  # 点击下载后如果弹出新窗口,就切换过去获取地址栏url再请求一次
                         self.driver.switch_to.window(self.driver.window_handles[1])
                         try:
-                            res1 = self.session.get(self.driver.current_url, headers=self.headers, cookies=self.cookies)
+                            res1 = self.session.get(self.driver.current_url)
                             print('歌曲res1:请求url:', res1.url, '\ncode', res.status_code, '\n字节数', res.content.__len__())
                             if res1.status_code == 2000:
                                 with open(songinfo['path'], "wb+") as f:
@@ -289,10 +301,9 @@ class Download_netease_cloud_music():
                         break
         except Exception as e:
             if isinstance(e, TimeoutException):
-                logging.error(f"{songinfo['name']} 下载超时!")
+                print(f"{songinfo['name']} 下载超时!")
             else:
-                logging.error(f"{songinfo['name']} 下载失败!", e)
-            self.failed_music.append(songinfo)
+                print(f"{songinfo['name']} 下载失败!", str(e))
         return songinfo
 
     def setSongInfo(self, songinfo):
@@ -305,7 +316,7 @@ class Download_netease_cloud_music():
                    img_path=songinfo.get('path_cover'))
         except mutagen.MutagenError:
             os.remove(songinfo['path'])
-            logging.error(f"{songinfo['path']}->添加标签信息失败,音频无效,已删除")
+            print(f"{songinfo['path']}->添加标签信息失败,音频无效,已删除")
         except Exception as e:
             print(e)
         # try:
@@ -365,16 +376,13 @@ class Download_netease_cloud_music():
     def handle(self, songinfos):
         for songinfo in songinfos:
             try:
-                print(f"----------------------{songinfo['name']} 开始下载----------------------")
+                print(f"----------------------【{songinfo['name']}】开始下载----------------------")
                 self.download_song(songinfo)  # 下载歌曲
                 self.setSongInfo(songinfo)  # 添加ID3信息
-                print(f"----------------------{songinfo['name']} 处理完成----------------------")
+                print(f"----------------------【{songinfo['name']}】处理完成----------------------")
             except Exception as e:
                 print(f"{songinfo['name']} 处理期间发生错误!\n",e)
-        print("-----------下载失败或添加ID3信息失败的音乐:--------------")
-        for i in self.failed_music:
-            print(i.get('name'))
-        print("-----------------------------------------------------")
+                self.failed_music.append(songinfo)
 
     def work(self):
         songurls = self.get_songurls(self.playlist)  # 输入歌单编号，得到歌单所有歌曲的url
@@ -397,6 +405,10 @@ class Download_netease_cloud_music():
             self.handle(songinfos)
             while len(self.failed_music) != 0:
                 time.sleep(1)
+                print("-----------下载失败或添加ID3信息失败的音乐:--------------")
+                for i in self.failed_music:
+                    print(i.get('name'))
+                print("-----------------------------------------------------")
                 accept = input(
                     "是否尝试重新下载失败的音乐 ? 如果仍然失败,可能是网易云搜索不到这首歌,建议您去http://tool.liumingye.cn/music/?page=searchPage上换一个平台手动下载\n(y/n)?")
                 if accept in ['y', 'Y', '']:
@@ -407,7 +419,7 @@ class Download_netease_cloud_music():
                 else:
                     break
         except Exception as e:
-            logging.error(e)
+            print(str(e))
         finally:
             if hasattr(self, 'driver'):
                 print("关闭浏览器中...")
@@ -460,8 +472,10 @@ def check_config(config_path):
     if config.get('version') and config['version'] == version:
        return config
     else:#版本不对就更新config
-        new_config = {}
+        new_config = {'version':version}
         for key in default_config.keys():
+            if key == 'version':
+                continue
             if config.get(key) != None:
                 new_config[key] = config[key]
             else:
