@@ -60,7 +60,6 @@ class Download_netease_cloud_music():
             self.cookies = config.get('cookies')
         else:
             self.login()
-        self.test_login_status()
         self.filename_rep_rule = config.get('filename_rep_rule')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
@@ -69,6 +68,7 @@ class Download_netease_cloud_music():
         self.session = requests.Session()
         self.session.headers = self.headers
         self.session.cookies = cookiejar_from_dict(self.cookies)
+        self.test_login_status()
         self.failed_music = []
         self.music_quality = {}
 
@@ -101,7 +101,8 @@ class Download_netease_cloud_music():
     def test_login_status(self):
         url = f'{host}/song/download/url'
         url += "?timestamp=" + str(int(time.time()))
-        res = requests.post(url, data={"id": "1335797413"})
+        self.login()
+        res = self.session.post(url, data={"id": "75972514","realIP":'116.25.146.177'})
         print(res)
     def login(self):
         if not self.username or not self.password:
